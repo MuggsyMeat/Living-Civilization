@@ -49,7 +49,7 @@ No renderer, entity, command, gameplay, Gradle, dependency, or license file was 
 
 The four files under `docs/` that were already in the baseline were not edited. See the source assessment below.
 
-Introducing commit: filled in after that commit is created.
+Introducing commit: `d1f92bd5fbd4a52b415c463786e1fff6e0dc739a` on `cursor/art-1.1-placeholder-2265` (`Mark the human texture as a visible placeholder.`). This sentence was added in the following commit on the same branch. `git rev-parse HEAD` is the branch tip after that update.
 
 ## Dependencies and interfaces
 
