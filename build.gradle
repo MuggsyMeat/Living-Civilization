@@ -1,0 +1,150 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+repositories {
+	mavenCentral()
+
+	// Add repositories to retrieve artifacts from in here.
+	// You should only use this when depending on other mods because
+	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
+	// for more information about repositories.
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"livingcivilizations" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+base {
+	archivesName = "living-civilization"
+}
+
+dependencies {
+	// To change the versions see the gradle.properties file
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+	// Fabric API. This is technically optional, but you probably want it anyway.
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	testImplementation platform('org.junit:junit-bom:5.13.4')
+	testImplementation 'org.junit.jupiter:junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+def verifiedArchiveBaseName = project.extensions.getByType(org.gradle.api.plugins.BasePluginExtension).archivesName.get()
+def verifiedArchive = layout.buildDirectory.file("libs/${verifiedArchiveBaseName}-${project.version}.jar").get().asFile
+def verifiedModVersion = project.version.toString()
+def verifiedMinecraftVersion = project.property('minecraft_version').toString()
+
+tasks.register('verifyModJar') {
+	dependsOn tasks.named('build')
+
+	doLast {
+		def artifact = verifiedArchive
+		if (!artifact.isFile() || artifact.length() == 0) {
+			throw new GradleException("Remapped mod JAR is missing or empty: ${artifact.name}")
+		}
+
+		new java.util.jar.JarFile(artifact).withCloseable { jar ->
+			def metadataEntry = jar.getEntry('fabric.mod.json')
+			if (metadataEntry == null) {
+				throw new GradleException('Mod JAR does not contain fabric.mod.json')
+			}
+
+			def metadata
+			jar.getInputStream(metadataEntry).withCloseable { input ->
+				metadata = new groovy.json.JsonSlurper().parse(input)
+			}
+
+			if (metadata.id != 'livingcivilizations' || metadata.name != 'Living Civilization') {
+				throw new GradleException("Unexpected mod identity in ${artifact.name}: ${metadata.id} / ${metadata.name}")
+			}
+			if (metadata.version != verifiedModVersion) {
+				throw new GradleException("Unexpected mod version in ${artifact.name}: ${metadata.version}")
+			}
+			if (!metadata.depends.minecraft.contains(verifiedMinecraftVersion)) {
+				throw new GradleException("JAR does not declare Minecraft ${verifiedMinecraftVersion}")
+			}
+
+			[
+				'net/livingcivilizations/LivingCivilization.class',
+				'net/livingcivilizations/client/LivingCivilizationClient.class',
+				'net/livingcivilizations/entity/HumanEntity.class',
+				'net/livingcivilizations/entity/HumanEntityTypes.class',
+				'net/livingcivilizations/command/LivingCivilizationCommands.class',
+				'net/livingcivilizations/client/entity/HumanEntityModel.class',
+				'net/livingcivilizations/client/entity/HumanEntityRenderer.class',
+				'assets/livingcivilizations/textures/entity/human.png'
+			].each { entryName ->
+				if (jar.getEntry(entryName) == null) {
+					throw new GradleException("Mod JAR is missing entrypoint class: ${entryName}")
+				}
+			}
+		}
+
+		logger.lifecycle("Verified Fabric mod artifact: ${artifact.name}")
+	}
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+}
+
+java {
+	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+	def projectName = project.name
+	inputs.property "projectName", projectName
+
+	from("LICENSE") {
+		rename { "${it}_$projectName"}
+	}
+}
+
+// configure the maven publication
+publishing {
+	publications {
+		create("mavenJava", MavenPublication) {
+			from components.java
+		}
+	}
+
+	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
+	repositories {
+		// Add repositories to publish to here.
+		// Notice: This block does NOT have the same function as the block in the top level.
+		// The repositories here will be used for publishing your artifact, not for
+		// retrieving dependencies.
+	}
+}

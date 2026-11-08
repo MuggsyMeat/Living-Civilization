@@ -1,0 +1,26 @@
+{
+	"schemaVersion": 1,
+	"id": "livingcivilizations",
+	"version": "${version}",
+	"name": "Living Civilization",
+	"description": "A foundation for autonomous civilizations in Minecraft.",
+	"authors": [
+		"Living Civilization"
+	],
+	"license": "CC0-1.0",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"net.livingcivilizations.LivingCivilization"
+		],
+		"client": [
+			"net.livingcivilizations.client.LivingCivilizationClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
