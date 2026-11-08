@@ -56,7 +56,7 @@ tasks.register('verifyModJar') {
 	doLast {
 		def artifact = verifiedArchive
 		if (!artifact.isFile() || artifact.length() == 0) {
-			throw new GradleException("Remapped mod JAR is missing or empty: ${artifact.name}")
+			throw new GradleException("Mod JAR is missing or empty: ${artifact.name}")
 		}
 
 		new java.util.jar.JarFile(artifact).withCloseable { jar ->
@@ -114,9 +114,9 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
+	// Java's withSourcesJar() publishes this project's sources jar.
+	// net.fabricmc.fabric-loom 1.19.4 is the non-remapping plugin: it sets
+	// dontRemapOutputs and does not register RemapSourcesJar.
 	withSourcesJar()
 
 	sourceCompatibility = JavaVersion.VERSION_25
