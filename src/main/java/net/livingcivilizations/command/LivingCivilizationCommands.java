@@ -14,13 +14,17 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 
 public final class LivingCivilizationCommands {
 	private static final int MAX_SPAWN_SEARCH_DEPTH = 32;
+	/** Same edge inset BlockCollisions uses before it expands the cursor by one block. */
+	private static final double COLLISION_CURSOR_EPSILON = 1.0E-7D;
 
 	private LivingCivilizationCommands() {
 	}
@@ -38,6 +42,33 @@ public final class LivingCivilizationCommands {
 
 	static boolean supportsSpawnFloor(boolean sturdyTop, boolean taggedSand) {
 		return sturdyTop || taggedSand;
+	}
+
+	private static boolean columnInValidBounds(ServerLevel level, BlockPos floorPos, BlockPos spawnPos, BlockPos headPos) {
+		return level.isInValidBounds(floorPos)
+				&& level.isInValidBounds(spawnPos)
+				&& level.isInValidBounds(headPos);
+	}
+
+	/**
+	 * Loaded-only check for every column in the BlockCollisions cursor.
+	 * {@code isLoaded} rejects invalid bounds and does not add a chunk ticket.
+	 * The 26.3 rectangle helpers on {@code LevelReader} are deprecated.
+	 */
+	private static boolean collisionFootprintLoaded(ServerLevel level, BlockPos spawnPos, AABB box) {
+		int minBlockX = Mth.floor(box.minX - COLLISION_CURSOR_EPSILON) - 1;
+		int maxBlockX = Mth.floor(box.maxX + COLLISION_CURSOR_EPSILON) + 1;
+		int minBlockZ = Mth.floor(box.minZ - COLLISION_CURSOR_EPSILON) - 1;
+		int maxBlockZ = Mth.floor(box.maxZ + COLLISION_CURSOR_EPSILON) + 1;
+		int y = spawnPos.getY();
+		for (int x = minBlockX; x <= maxBlockX; x++) {
+			for (int z = minBlockZ; z <= maxBlockZ; z++) {
+				if (!level.isLoaded(new BlockPos(x, y, z))) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	private static int spawnHuman(CommandSourceStack source) {
@@ -62,15 +93,8 @@ public final class LivingCivilizationCommands {
 					BlockPos spawnPos = origin.relative(direction, distance).below(drop);
 					BlockPos floorPos = spawnPos.below();
 					BlockPos headPos = spawnPos.above();
-					if (!level.hasChunk(spawnPos.getX(), spawnPos.getZ())
-							|| !level.getWorldBorder().isWithinBounds(spawnPos)) {
-						continue;
-					}
-
-					BlockState floor = level.getBlockState(floorPos);
-					if (!supportsSpawnFloor(floor.isFaceSturdy(level, floorPos, Direction.UP), floor.is(BlockTags.SAND))
-							|| !level.getBlockState(spawnPos).getCollisionShape(level, spawnPos).isEmpty()
-							|| !level.getBlockState(headPos).getCollisionShape(level, headPos).isEmpty()) {
+					if (!level.getWorldBorder().isWithinBounds(spawnPos)
+							|| !columnInValidBounds(level, floorPos, spawnPos, headPos)) {
 						continue;
 					}
 
@@ -81,6 +105,17 @@ public final class LivingCivilizationCommands {
 					human.setPos(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5);
 					human.setYRot(player.getYRot());
 					human.setXRot(0.0F);
+					if (!collisionFootprintLoaded(level, spawnPos, human.getBoundingBox())) {
+						continue;
+					}
+
+					BlockState floor = level.getBlockState(floorPos);
+					if (!supportsSpawnFloor(floor.isFaceSturdy(level, floorPos, Direction.UP), floor.is(BlockTags.SAND))
+							|| !level.getBlockState(spawnPos).getCollisionShape(level, spawnPos).isEmpty()
+							|| !level.getBlockState(headPos).getCollisionShape(level, headPos).isEmpty()) {
+						continue;
+					}
+
 					if (!level.noCollision(human) || !level.addFreshEntity(human)) {
 						continue;
 					}
